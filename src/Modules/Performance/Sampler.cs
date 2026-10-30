@@ -4,30 +4,6 @@ using static WinScope.Modules.Performance.Native;
 
 namespace WinScope.Modules.Performance;
 
-internal enum GpuStatus { Starting, Available, Unavailable }
-
-/// <summary>One app right now, for the "Right now" table and the dashboard card.</summary>
-internal readonly record struct AppNow(string Name, int Count, double Cpu, double Gpu, long Ram, double Io, long VRam);
-
-/// <summary>The latest sample, published by the sampler as an immutable object.</summary>
-internal sealed class LiveData
-{
-    public DateTime Utc;
-    public Totals Totals;
-    public long CommitUsed, CommitLimit;
-    public bool HasRates;
-    public GpuStatus Gpu;
-    public bool DiskAvailable;
-    public bool VRamAvailable;
-    public AppNow[] Apps = Array.Empty<AppNow>();
-    public double SelfCpu;
-    public int ProcessCount;
-    public int GpuEvery = 1;
-    public int Cpus = 1;
-    /// <summary>False on a non-64-bit build: per-app, GPU and disk figures are then unavailable.</summary>
-    public bool Supported = true;
-}
-
 /// <summary>
 /// The 1 Hz background collector. Each tick reads: total CPU (GetSystemTimes), memory (GlobalMemoryStatusEx),
 /// every process's CPU time / private working set / I/O counters (one NtQuerySystemInformation call – no process
@@ -103,6 +79,9 @@ internal sealed class Sampler : IDisposable
         public readonly GpuAggregator GpuAgg = new();
         public readonly AdapterPicker Picker = new();
         public double GpuOther = double.NaN;
+        public Dictionary<AdapterKey, GpuAdapters.Info> AdapterInfo = new();
+        public readonly Dictionary<AdapterKey, double> Capacity = new();
+        public int AdapterInfoReadTick = -1000;
         public GpuStatus Gpu = GpuStatus.Starting;
         public int GpuTries, GpuEvery = 1, Tick;
         public double GpuCostMs;
@@ -305,13 +284,20 @@ internal sealed class Sampler : IDisposable
             apps[i] = new AppNow(a.Name, a.Count, rates ? a.Cpu : double.NaN,
                 st.Gpu == GpuStatus.Available ? a.Gpu : double.NaN, a.Ram, rates ? a.Io : double.NaN, vramOk ? a.VRam : -1);
         }
-        _latest = new LiveData
+        var ld = new LiveData
         {
             Utc = now, Totals = tot, CommitUsed = commitUsed, CommitLimit = commitLimit, HasRates = rates,
             Gpu = st.Gpu, DiskAvailable = diskOk, VRamAvailable = vramOk, Apps = apps,
             SelfCpu = rates ? tr.SelfCpu : double.NaN, ProcessCount = procOk ? tr.ProcessCount : 0, GpuEvery = st.GpuEvery,
             Cpus = st.Cpus, Supported = ProcessParser.Supported,
+            GpuAdapterCount = st.AdapterEngines.Count,
         };
+        if (st.Picker.Current is AdapterKey pa)
+        {
+            if (st.AdapterInfo.TryGetValue(pa, out var gi)) { ld.GpuName = gi.Name.Length > 0 ? gi.Name : null; ld.GpuVramTotal = gi.DedicatedBytes; }
+            if (st.AdapterDedicated.TryGetValue(pa, out var used)) ld.GpuVramUsed = used;
+        }
+        _latest = ld;   // publish only once complete
     }
 
     private static void Top(List<AppAgg> all, List<AppValue> dest, int n, Func<AppAgg, double> key, double min)
@@ -418,7 +404,17 @@ internal sealed class Sampler : IDisposable
             if (st.AdapterDedicated.Count == 0)   // no adapter counter: sum the per-process figures instead
                 foreach (var (_, adapter, bytes) in st.VRamItems)
                     st.AdapterDedicated[adapter] = st.AdapterDedicated.GetValueOrDefault(adapter) + bytes;
-            if (ok) st.Picker.Pick(st.AdapterDedicated, st.AdapterEngines);
+            if (ok)
+            {
+                // Prefer the adapters' real video-memory sizes (registry); fall back to memory in use.
+                bool unknown = false;
+                foreach (var a in st.AdapterEngines.Keys) if (!st.AdapterInfo.ContainsKey(a)) unknown = true;
+                if (unknown && st.Tick - st.AdapterInfoReadTick >= 300) { st.AdapterInfo = GpuAdapters.Read(); st.AdapterInfoReadTick = st.Tick; }
+                st.Capacity.Clear();
+                foreach (var a in st.AdapterEngines.Keys)
+                    if (st.AdapterInfo.TryGetValue(a, out var info) && info.DedicatedBytes > 0) st.Capacity[a] = info.DedicatedBytes;
+                st.Picker.Pick(st.Capacity.Count > 0 ? st.Capacity : st.AdapterDedicated, st.AdapterEngines);
+            }
 
             double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
             st.GpuCostMs = st.GpuCostMs <= 0 ? ms : st.GpuCostMs * 0.8 + ms * 0.2;

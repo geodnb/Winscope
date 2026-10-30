@@ -72,6 +72,27 @@ internal static class NetNative
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetProcessTimes(IntPtr process, out long creation, out long exit, out long kernel, out long user);
 
+    // ---------------------------------------------------------------- wlanapi (report redaction only)
+
+    public const uint WLAN_CLIENT_VERSION_2 = 2;
+
+    [DllImport("wlanapi.dll", ExactSpelling = true)]
+    public static extern uint WlanOpenHandle(uint clientVersion, IntPtr reserved, out uint negotiatedVersion, out IntPtr clientHandle);
+
+    [DllImport("wlanapi.dll", ExactSpelling = true)]
+    public static extern uint WlanCloseHandle(IntPtr clientHandle, IntPtr reserved);
+
+    [DllImport("wlanapi.dll", ExactSpelling = true)]
+    public static extern uint WlanEnumInterfaces(IntPtr clientHandle, IntPtr reserved, out IntPtr interfaceList);
+
+    /// <summary>DWORD WlanGetProfileList(HANDLE, const GUID*, PVOID reserved, PWLAN_PROFILE_INFO_LIST*). Not on Microsoft's
+    /// list of location-gated Wi-Fi APIs, so it can't trigger a location prompt.</summary>
+    [DllImport("wlanapi.dll", ExactSpelling = true)]
+    public static extern uint WlanGetProfileList(IntPtr clientHandle, in Guid interfaceGuid, IntPtr reserved, out IntPtr profileList);
+
+    [DllImport("wlanapi.dll", ExactSpelling = true)]
+    public static extern void WlanFreeMemory(IntPtr memory);
+
     // ---------------------------------------------------------------- advapi32 ETW (admin only)
 
     public const uint WNODE_FLAG_TRACED_GUID = 0x00020000;

@@ -21,6 +21,7 @@ It's a sister project to [AirScope](https://github.com/geodnb/AirScope), the Wi-
 - **Events in plain English**: blue screens, crashes, graphics driver resets, hardware errors, Wi-Fi drops, failed updates and unexpected shutdowns, each explained with what to try. Known-harmless noise is hidden.
 - **Storage and safe cleanup**: what's filling your drives, the largest files, and cleanup that shows exactly what will be removed before anything is deleted. Your own files only ever go to the Recycle Bin.
 - **Dashboard**: all four tools at a glance. Click any panel to open the full tool.
+- **One-click reports**: a plain-text snapshot of what your PC is doing, made to paste into an AI assistant or send to someone helping you. Personal details are removed by default.
 - **Runs as a normal user.** The few features that need admin rights offer to restart elevated, and nothing else changes.
 
 ---
@@ -33,6 +34,7 @@ It's a sister project to [AirScope](https://github.com/geodnb/AirScope), the Wi-
 - [Network](#network)
 - [Events](#events)
 - [Storage](#storage)
+- [Reports](#reports)
 - [Administrator features](#administrator-features)
 - [Getting started](#getting-started)
 - [Files WinScope creates](#files-winscope-creates)
@@ -146,6 +148,23 @@ Your own files (from the analyser) only ever go to the **Recycle Bin**, one at a
 
 ---
 
+## Reports
+
+Having a problem? Click **Report ▾** (top right) and choose:
+
+- **Full system report**: this PC (Windows version, CPU, graphics, memory, uptime), the **key findings** from every tool, then each tool's details.
+- **A single tool's report**: Performance, Network, Events or Storage on its own.
+
+Reports are plain text written to be read by a person or an AI assistant, so you can paste one into ChatGPT, Claude, a forum post or an email and ask "what's wrong with my PC?". They're built from what WinScope has already collected, so they're instant. They're most useful after WinScope has been running for a while, or straight after the problem happens.
+
+**Settings (⚙):**
+- **When you make a report:** copy it to the clipboard (default), save it as a text file in `Documents\WinScope Reports`, or both.
+- **Hide personal details** (on by default): removes user, account and PC names, email addresses, Wi-Fi network names, hardware (MAC) addresses, device serial numbers, internet IP addresses, Windows account IDs, and the names of your personal files and folders (a big video in Videos shows as `%USERPROFILE%\Videos\…\(name hidden).mp4`). Home-network addresses like 192.168.x.x are kept, because they're the same on millions of networks and help with diagnosis. Making a report never asks for location access.
+
+Read a report before you share it. Turn off *Hide personal details* only for reports you keep to yourself.
+
+---
+
 ## Administrator features
 
 WinScope runs as a normal user. Two things need administrator rights because Windows only allows them to admin tools:
@@ -179,10 +198,11 @@ Only one copy of WinScope runs at a time.
 
 | Location | Contents |
 |---|---|
-| `%AppData%\WinScope\settings.json` | Window size and last tool |
+| `%AppData%\WinScope\settings.json` | Window size, last tool and report settings |
 | `%AppData%\WinScope\events.json` | Events filters |
 | `%AppData%\WinScope\cleanup-log.txt` | One line per cleanup: what, how much, what was skipped |
 | `%AppData%\WinScope\error.log` | Only if something goes wrong (size-limited). Useful for bug reports |
+| `Documents\WinScope Reports\` | Reports, only if you choose to save them as files |
 
 Nothing is written there while WinScope runs as administrator. To remove WinScope completely, delete the exe and that folder.
 
@@ -201,7 +221,7 @@ Nothing is written there while WinScope runs as administrator. To remove WinScop
 
 ## Privacy and safety
 
-- **No internet access, telemetry or update checks.** WinScope makes no network connections of any kind.
+- **No internet access, telemetry or update checks.** WinScope makes no network connections of any kind. Reports go only where you put them: the clipboard, or a file on your PC.
 - **Read-only, except Storage cleanup**, which only deletes what you've previewed and confirmed, within fixed folders and with the checks described above.
 - **No admin rights by default.** Elevation is only ever at your request, and the elevated copy refuses to write to your user folder.
 - **No third-party packages.** It's just .NET and Windows' own APIs.

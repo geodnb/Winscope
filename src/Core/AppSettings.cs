@@ -8,6 +8,10 @@ public sealed class AppSettings
     public double? WindowWidth { get; set; }
     public double? WindowHeight { get; set; }
     public bool Maximised { get; set; }
+    /// <summary>Where the Report button sends reports. Clipboard by default.</summary>
+    public ReportOutput ReportOutput { get; set; } = ReportOutput.Clipboard;
+    /// <summary>Hide personal details in reports (on by default).</summary>
+    public bool RedactReports { get; set; } = true;
 
     public static string Folder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WinScope");
@@ -29,6 +33,7 @@ public sealed class AppSettings
     public void Clamp()
     {
         if (!Sections.IsValid(LastSection)) LastSection = Sections.Home;
+        if (!Enum.IsDefined(ReportOutput)) ReportOutput = ReportOutput.Clipboard;
         if (WindowWidth is double w && (double.IsNaN(w) || w < 900 || w > 10000)) WindowWidth = null;
         if (WindowHeight is double h && (double.IsNaN(h) || h < 600 || h > 10000)) WindowHeight = null;
     }

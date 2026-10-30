@@ -2,7 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="WinScope" Width="1320" Height="880" MinWidth="1000" MinHeight="760"
+        xmlns:ui="clr-namespace:WinScope.UI"
         Style="{StaticResource AppWindow}" WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <ui:NotBoolConverter x:Key="NotBool"/>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -26,11 +30,35 @@
             </StackPanel>
             <StackPanel x:Name="NavBar" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="ReportBtn" Content="Report  ▾" Click="Report_Click" Margin="0,0,8,0"
+                        ContextMenuService.IsEnabled="False"
+                        ToolTip="Make a plain-text snapshot of what this PC is doing – to paste into an AI assistant or send to someone helping you">
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="ReportMenu" Placement="Bottom"/>
+                    </Button.ContextMenu>
+                </Button>
                 <Border x:Name="AdminBadge" CornerRadius="11" Padding="10,3" Margin="0,0,8,0" BorderThickness="1" VerticalAlignment="Center">
                     <TextBlock x:Name="AdminBadgeText" FontSize="11.5"/>
                 </Border>
-                <Button x:Name="ElevateBtn" Content="Restart as admin" Click="Elevate_Click"
+                <Button x:Name="ElevateBtn" Content="Restart as admin" Click="Elevate_Click" Margin="0,0,8,0"
                         ToolTip="Restart WinScope with administrator rights to unlock per-app network speeds and system cache cleanup"/>
+                <ToggleButton x:Name="SettingsBtn" Style="{StaticResource Chip}" Padding="10,6" Margin="0" Content="⚙" FontSize="14" ToolTip="Settings"
+                              IsHitTestVisible="{Binding IsOpen, ElementName=SettingsPopup, Converter={StaticResource NotBool}}"/>
+                <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsBtn}" Placement="Bottom" HorizontalOffset="-280"
+                       IsOpen="{Binding IsChecked, ElementName=SettingsBtn}" StaysOpen="False" AllowsTransparency="True" Closed="SettingsPopup_Closed">
+                    <Border Style="{StaticResource Card}" Width="320" Margin="0,6,0,0" Background="{StaticResource Panel2}">
+                        <StackPanel>
+                            <TextBlock Text="REPORTS" Style="{StaticResource H}"/>
+                            <TextBlock Text="When you make a report" Foreground="{StaticResource Muted}" FontSize="11.5" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="ReportOutputBox" SelectionChanged="ReportOutput_Changed" Margin="0,0,0,10"/>
+                            <CheckBox x:Name="RedactCheck" Content="Hide personal details" Click="Redact_Click" Margin="0,0,0,4"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Muted}" FontSize="11.5" Margin="0,0,0,10"
+                                       Text="Removes your user and PC names, Wi-Fi network names, hardware (MAC) addresses, internet IP addresses and the name in folder paths. Recommended before sharing a report."/>
+                            <Button Content="Open reports folder" Click="OpenReports_Click" HorizontalAlignment="Stretch"/>
+                            <TextBlock x:Name="SettingsNote" TextWrapping="Wrap" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,12,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </StackPanel>
         </Grid>
 

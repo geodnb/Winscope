@@ -143,6 +143,54 @@ internal sealed class StorageView : Grid
         _analyser.Stop();
     }
 
+    /// <summary>A snapshot of everything the report needs – cheap, UI thread, no I/O.</summary>
+    internal StorageReportData ReportData()
+    {
+        var snap = _svc.Cleanup.Snapshot;
+        var cats = _svc.Cleanup.Defs.Select(def =>
+        {
+            snap.Results.TryGetValue(def.Id, out var r);
+            return new ReportCategory(def.Name, def.ReportOnly, def.Kind == CatKind.RecycleBin, r != null, r?.Files ?? 0, r?.Bytes ?? 0,
+                r?.Cleanable ?? false, def.DefaultOn, def.AdminOnly, def.PartAdmin, r?.Present ?? false,
+                (r?.Notes ?? new List<string>()).Select(NoAccount).ToList());
+        }).ToList();
+
+        ReportScan? scan = null;
+        if (_analyser.LastResult is ScanResult res)
+        {
+            var kids = res.Root.Children ?? new List<DirNode>();
+            scan = new ReportScan(res.RootPath, res.FinishedUtc, res.Took, res.Bytes, res.Files, res.Dirs, res.Links, res.Unreadable,
+                res.CloudFiles, res.CloudBytes, res.Cancelled, res.DriveUsed,
+                kids.OrderByDescending(k => k.Size).Take(StorageReport.MaxFolders)
+                    .Select(k => new ReportFolder(FsWalk.Join(res.RootPath, k.Name), k.Size, k.Files, k.IsLink)).ToList(),
+                res.Largest.Take(StorageReport.MaxFiles).Select(f => new ReportFile(f.Path, f.Size, f.WriteUtc)).ToList(),
+                kids.Count);
+        }
+
+        return new StorageReportData
+        {
+            Drives = _svc.Drives.Select(x => new ReportDrive(x.Letter, x.Label, x.FileSystem, x.Total, x.Free, x.Used,
+                x.Type == DriveType.Removable)).ToList(),
+            DrivesLoaded = _svc.DrivesLoaded,
+            Categories = cats,
+            AnalysedUtc = snap.AnalysedUtc,
+            Analysing = snap.Analysing,
+            SafeBytes = snap.SafeBytes,
+            IsAdmin = WinScope.Core.Elevation.IsAdmin,
+            IsDesktopUser = WinScope.Core.Elevation.IsDesktopUser,
+            Scan = scan,
+            ScanRunning = _analyser.IsScanning,
+            CleanRuns = _svc.Cleanup.CleanRuns,
+        };
+    }
+
+    /// <summary>Reports never name accounts, even unredacted ("WinScope is running as DOMAIN\name …").</summary>
+    private static string NoAccount(string s)
+    {
+        string acct = WinScope.Core.Elevation.AccountName;
+        return acct.Length >= 3 ? s.Replace(acct, "a different account", StringComparison.OrdinalIgnoreCase) : s;
+    }
+
     /// <summary>For the shell's restart guard.</summary>
     public string? BusyReason =>
         _cleanup.IsCleaning || _svc.Cleanup.Snapshot.Cleaning ? "a cleanup is running"

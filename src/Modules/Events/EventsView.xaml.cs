@@ -106,6 +106,9 @@ public partial class EventsView : UserControl
 
     private TimeSpan Range => TimeSpan.FromDays(_prefs.RangeDays);
 
+    /// <summary>The range chosen in the view (1, 7 or 30 days) – used by the report.</summary>
+    internal int RangeDays => _prefs.RangeDays;
+
     private string RangeLabel => _prefs.RangeDays switch { 1 => "Last 24 hours", 30 => "Last 30 days", _ => "Last 7 days" };
 
     private void Rebuild(bool scrollTop)
@@ -223,26 +226,9 @@ public partial class EventsView : UserControl
     /// restart: Sun 19:02". The tick count only resets on a full start (Fast Startup resumes the kernel), so the most
     /// recent start comes from Kernel-Boot 27 in the log when it is later than the tick-count boot time.
     /// </summary>
-    internal static string BootLine(EventsSnapshot? snap)
-    {
-        var now = DateTime.Now;
-        var up = TimeSpan.FromMilliseconds(Environment.TickCount64);
-        var fullBoot = now - up;
-        if (snap?.LastStartUtc is DateTime ls && snap.LastStartKind is 1 or 2)
-        {
-            var start = ls.ToLocalTime();
-            if (start > fullBoot + TimeSpan.FromMinutes(3) && start <= now)
-                return $"Last start: {When(start)} ({(snap.LastStartKind == 1 ? "Fast Startup" : "resumed from hibernation")})  ·  Last full restart: {When(fullBoot)}";
-        }
-        return $"Last restart: {When(fullBoot)}  ·  Up {Format.Span(up)}";
-    }
-
-    private static string When(DateTime local)
-    {
-        var now = DateTime.Now;
-        if (local.Date == now.Date) return "today " + local.ToString("HH:mm", Inv);
-        return (now - local).TotalDays < 6 ? local.ToString("ddd HH:mm", Inv) : local.ToString("d MMM HH:mm", Inv);
-    }
+    internal static string BootLine(EventsSnapshot? snap) =>
+        EventsReport.BootText(DateTime.Now, TimeSpan.FromMilliseconds(Environment.TickCount64), snap?.LastStartUtc?.ToLocalTime(),
+            snap?.LastStartKind ?? -1, compact: true);
 
     private void UpdateNotes(DateTime sinceUtc)
     {

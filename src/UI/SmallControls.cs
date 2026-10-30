@@ -115,3 +115,10 @@ public sealed class AdminNotice : Border
         if (Elevation.IsAdmin) Visibility = Visibility.Collapsed;
     }
 }
+
+/// <summary>true ↔ false, for "hit-testable while the popup is closed".</summary>
+public sealed class NotBoolConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object value, Type t, object p, System.Globalization.CultureInfo c) => value is not true;
+    public object ConvertBack(object value, Type t, object p, System.Globalization.CultureInfo c) => value is not true;
+}

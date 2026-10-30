@@ -43,4 +43,12 @@ public interface IToolModule : IDisposable
     /// progress) – a short reason like "a cleanup is running". The shell won't restart as admin while set.
     /// </summary>
     string? BusyReason => null;
+
+    /// <summary>
+    /// This tool's part of a report (see <see cref="ReportSection"/>), built from data already collected – it must
+    /// return quickly (well under 200 ms) and never block on I/O. Called on the UI thread. Return null if the tool
+    /// has nothing to report. When <see cref="ReportOptions.Redact"/> is set, remove personal details (use
+    /// <see cref="Redactor"/>).
+    /// </summary>
+    ReportSection? BuildReport(ReportOptions options) => null;
 }

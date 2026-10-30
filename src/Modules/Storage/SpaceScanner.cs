@@ -61,6 +61,7 @@ internal sealed class ScanResult
     public long Unreadable;
     public bool Cancelled;
     public TimeSpan Took;
+    public DateTime FinishedUtc { get; init; }
     /// <summary>For a whole-drive scan: the drive's used space, so the gap (system files, unreadable folders) can be shown.</summary>
     public long? DriveUsed { get; set; }
 }
@@ -140,7 +141,7 @@ internal static class SpaceScanner
         {
             Root = root, RootPath = rootPath, Largest = top.ToSortedList(),
             Dirs = dirs, Files = files, Bytes = bytes, CloudFiles = cloudFiles, CloudBytes = cloudBytes, Links = links, Unreadable = unreadable,
-            Cancelled = cancelled, Took = DateTime.UtcNow - started,
+            Cancelled = cancelled, Took = DateTime.UtcNow - started, FinishedUtc = DateTime.UtcNow,
         };
     }
 

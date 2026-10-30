@@ -75,13 +75,17 @@ public static class EventAggregator
                     why = "while the PC was starting up";
                 if (why != null)
                 {
+                    const string normal = "This is normal: network adapters disconnect when the PC sleeps, shuts down or starts up. ";
+                    string suffix = " (" + why + ")";
+                    var render = c.WithNetworkName;
                     list[i] = c with
                     {
                         Severity = EvSeverity.Info,
                         Kind = null,
-                        Title = c.Title + " (" + why + ")",
-                        Explain = "This is normal: network adapters disconnect when the PC sleeps, shuts down or starts up. " + c.Explain,
+                        Title = c.Title + suffix,
+                        Explain = normal + c.Explain,
                         Tips = Array.Empty<string>(),
+                        WithNetworkName = render == null ? null : n => { var (t2, x2) = render(n); return (t2 + suffix, normal + x2); },
                     };
                     continue;
                 }

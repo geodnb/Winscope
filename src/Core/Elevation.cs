@@ -24,6 +24,18 @@ public static class Elevation
     /// <summary>"DOMAIN\name" of this process's account, for messages.</summary>
     public static string AccountName { get; } = SafeName();
 
+    /// <summary>
+    /// (user, domain) of the person signed in to this desktop session (may differ from this process's account when
+    /// elevated as another admin). Nulls when unknown. Used by the report redactor.
+    /// </summary>
+    public static (string? user, string? domain) DesktopUser { get; } = SafeDesktopUser();
+
+    private static (string?, string?) SafeDesktopUser()
+    {
+        try { return (WtsString(WTS_INFO_CLASS_UserName), WtsString(WTS_INFO_CLASS_DomainName)); }
+        catch { return (null, null); }
+    }
+
     /// <summary>Set by the shell: returns a reason (e.g. "a cleanup is running") when a restart would interrupt work.</summary>
     public static Func<string?>? BusyCheck { get; set; }
 

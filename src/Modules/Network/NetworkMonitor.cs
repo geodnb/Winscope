@@ -43,6 +43,7 @@ internal sealed class NetworkMonitor : IDisposable
     private readonly Dictionary<string, (long down, long up)> _appSession = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, (long down, long up)> _appPrevTick = new(StringComparer.OrdinalIgnoreCase);
     private double _prevDt;
+    private DateTime _sessionStart;
     /// <summary>ETW bytes for PIDs whose name wasn't known yet, merged into the real app once it resolves.</summary>
     private readonly Dictionary<uint, Pending> _pending = new();
     private sealed class Pending { public long Down, Up; public long FirstFileTime; public long FirstTick; }
@@ -99,6 +100,7 @@ internal sealed class NetworkMonitor : IDisposable
     private async Task Loop(CancellationToken ct)
     {
         _lastTs = Stopwatch.GetTimestamp();
+        _sessionStart = MonoClock.UtcNow;
         try { _adapters.ReadDelta(); } catch (Exception ex) { NetLog.Error(ex); }   // baseline
         try { Tick(ct, first: true); } catch (Exception ex) { NetLog.Error(ex); }
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -224,6 +226,9 @@ internal sealed class NetworkMonitor : IDisposable
             EtwMessage = etwMessage,
             ConnError = _connError,
             AdapterNames = _adapters.AdapterNames + (_adapters.UsingFallback ? " (basic mode)" : ""),
+            Adapters = _adapters.Adapters,
+            SessionStartUtc = _sessionStart,
+            PerAppSinceUtc = perApp ? etw!.StartedUtc : null,
         };
         try { Updated?.Invoke(); } catch (Exception ex) { NetLog.Error(ex); }
     }

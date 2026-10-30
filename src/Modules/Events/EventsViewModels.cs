@@ -145,17 +145,7 @@ public sealed class EventItemVm : INotifyPropertyChanged
     public double RowOpacity => Newest.Harmless ? 0.72 : 1.0;
     public string CategoryText => CategoryName(Newest.Category);
 
-    public static string CategoryName(EvCategory c) => c switch
-    {
-        EvCategory.Crashes => "Crashes",
-        EvCategory.Graphics => "Graphics & drivers",
-        EvCategory.Hardware => "Hardware",
-        EvCategory.Network => "Network",
-        EvCategory.Updates => "Updates",
-        EvCategory.Power => "Power & startup",
-        EvCategory.Services => "Services",
-        _ => "Other",
-    };
+    public static string CategoryName(EvCategory c) => EvText.CategoryName(c);
 
     public Brush SevBrush => Styles.SevBrush(Newest);
     public Brush SevSoft => Styles.SevSoft(Newest);
@@ -281,5 +271,5 @@ internal static class Styles
     };
 
     /// <summary>Counts as a "problem" on the dashboard.</summary>
-    public static bool IsProblem(Classified c) => !c.Harmless && c.Severity >= EvSeverity.Problem;
+    public static bool IsProblem(Classified c) => EvText.IsProblem(c);
 }

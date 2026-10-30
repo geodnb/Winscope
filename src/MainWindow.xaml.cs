@@ -46,6 +46,7 @@ public partial class MainWindow : Window
         BuildNav();
         BuildHome();
         ShowAdminState();
+        InitReportSettings();
 
         SourceInitialized += (_, _) => DarkTitleBar(this);
         Loaded += (_, _) => OnLoaded();
@@ -190,10 +191,94 @@ public partial class MainWindow : Window
         return false;
     }
 
+    // ================================================================== reports
+
+    private void InitReportSettings()
+    {
+        ReportOutputBox.ItemsSource = new[] { "Copy it to the clipboard", "Save it as a text file", "Both" };
+        ReportOutputBox.SelectedIndex = (int)_settings.ReportOutput;
+        RedactCheck.IsChecked = _settings.RedactReports;
+        SettingsNote.Text = (UserFiles.WriteAllowed
+            ? "Reports are saved to Documents\\WinScope Reports. "
+            : "While running as administrator, reports are only copied to the clipboard and settings changes aren't saved. ")
+            + $"WinScope {Version}.";
+    }
+
+    private void ReportOutput_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReportOutputBox.SelectedIndex >= 0) _settings.ReportOutput = (ReportOutput)ReportOutputBox.SelectedIndex;
+    }
+
+    private void Redact_Click(object sender, RoutedEventArgs e) => _settings.RedactReports = RedactCheck.IsChecked == true;
+
+    private void SettingsPopup_Closed(object? sender, EventArgs e)
+    {
+        SettingsBtn.IsChecked = false;
+        _settings.Save();
+    }
+
+    private void OpenReports_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!UserFiles.WriteAllowed) { SettingsNote.Text = "Not available while running as administrator."; return; }
+            Directory.CreateDirectory(ReportService.ReportsFolder);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe")
+                { ArgumentList = { ReportService.ReportsFolder }, UseShellExecute = false });
+        }
+        catch (Exception ex) { SettingsNote.Text = "Couldn't open the folder: " + ex.Message; }
+    }
+
+    /// <summary>Report menu: full report first, then the current tool (if one is open), then every tool.</summary>
+    private void Report_Click(object sender, RoutedEventArgs e)
+    {
+        ReportMenu.Items.Clear();
+        var current = _modules.FirstOrDefault(m => m.Id == _current);
+        AddItem("Full system report", "Everything: this PC, key findings and all four tools", null);
+        if (current != null) AddItem($"{current.Title} report", $"Just the {current.Title} tool", current);
+        ReportMenu.Items.Add(new Separator { Margin = new Thickness(4), Background = (Brush)FindResource("LineBrush") });
+        foreach (var m in _modules.Where(m => m != current)) AddItem($"{m.Title} report", null, m);
+        ReportMenu.PlacementTarget = ReportBtn;
+        ReportMenu.IsOpen = true;
+
+        void AddItem(string header, string? tip, IToolModule? only)
+        {
+            var mi = new MenuItem { Header = header, ToolTip = tip };
+            mi.Click += (_, _) => MakeReport(only);
+            ReportMenu.Items.Add(mi);
+        }
+    }
+
+    private bool _reporting;
+
+    private async void MakeReport(IToolModule? only)
+    {
+        if (_reporting) return;
+        var o = new ReportOptions { Redact = _settings.RedactReports, NowUtc = DateTime.UtcNow };
+        var tools = (only != null ? new[] { only } : _modules.ToArray())
+            .Select(m => (m.Title, (Func<ReportOptions, ReportSection?>)(opt => m.BuildReport(opt))));
+        string text;
+        try { text = ReportService.Compose(tools, o, only?.Title); }
+        catch (Exception ex) { App.LogError(ex); StatusLeft.Text = "Couldn't make the report: " + ex.Message; return; }
+        _reporting = true;
+        ReportBtn.IsEnabled = false;
+        try
+        {
+            var (msg, _) = await ReportService.DeliverAsync(text, _settings.ReportOutput, only?.Title ?? "system");
+            if (_closed) return;
+            // The warning goes first: the status line is trimmed with "…" when it's long.
+            StatusLeft.Text = (o.Redact ? "" : "Personal details are INCLUDED – turn on \"Hide personal details\" in ⚙ before sharing. ") + msg;
+            StatusLeft.ToolTip = StatusLeft.Text;
+        }
+        catch (Exception ex) { App.LogError(ex); if (!_closed) StatusLeft.Text = "Couldn't deliver the report: " + ex.Message; }
+        finally { _reporting = false; if (!_closed) ReportBtn.IsEnabled = true; }
+    }
+
     // ================================================================== admin
 
     private void ShowAdminState()
     {
+        AdminBadge.Visibility = Elevation.IsAdmin ? Visibility.Visible : Visibility.Collapsed;   // header space is tight
         if (Elevation.IsAdmin)
         {
             AdminBadge.Background = Palette.B(Palette.Fair, 0.1);
@@ -229,6 +314,7 @@ public partial class MainWindow : Window
 
     private void OnLoaded()
     {
+        Redactor.Warm();   // look up names and folders to hide in reports now, off the UI thread
         foreach (var m in _modules)
         {
             try { m.Start(); }
@@ -284,9 +370,11 @@ public partial class MainWindow : Window
     /// <summary>Stand-in for a tool whose constructor threw.</summary>
     private sealed class FailedModule : IToolModule
     {
+        private readonly string _why;
+
         public FailedModule(string id, string title, Exception ex)
         {
-            Id = id; Title = title;
+            Id = id; Title = title; _why = ex.GetBaseException().Message;
             var t = new TextBlock { Text = $"{title} couldn't start:\n{ex.Message}", TextWrapping = TextWrapping.Wrap, Foreground = Palette.B(Palette.Bad) };
             Summary = t;
             FullView = new Border { Style = (Style)Application.Current.FindResource("Card"), Child = new TextBlock { Text = t.Text, TextWrapping = TextWrapping.Wrap, Foreground = Palette.B(Palette.Bad) } };
@@ -301,5 +389,12 @@ public partial class MainWindow : Window
         public void SetVisibility(bool s, bool f) { }
         public event Action? OpenRequested { add { } remove { } }
         public void Dispose() { }
+
+        public ReportSection? BuildReport(ReportOptions options) => new()
+        {
+            Title = Title,
+            Findings = new[] { $"The {Title} tool couldn't start, so this report has no {Title} data." },
+            Body = $"The {Title} tool couldn't start: {(options.Redact ? Redactor.Apply(_why) : _why)}",
+        };
     }
 }
