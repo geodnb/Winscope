@@ -14,6 +14,8 @@ Windows' built-in tools each answer part of the question and none of them rememb
 
 It's a sister project to [AirScope](https://github.com/geodnb/AirScope), the Wi-Fi analyser.
 
+<img width="2544" height="1421" alt="image" src="https://github.com/user-attachments/assets/67f7999a-bfa5-4ce0-a75f-9ff235f33103" />
+
 ## Highlights
 
 - **Performance history**: CPU, GPU, RAM and disk for the last 2 hours, with the busiest apps recorded every second. Hover over any moment to see what was running, and look back at a spike log that names the culprit.
