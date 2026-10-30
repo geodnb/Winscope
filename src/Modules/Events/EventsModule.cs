@@ -67,6 +67,38 @@ public sealed class EventsModule : IToolModule
 
     public void BeginStop() => _engine.BeginStop();
 
+    /// <summary>
+    /// Report section from the snapshot already held (UI thread; no log reads, no waiting). Groups are immutable,
+    /// so the newest snapshot can be used even if it hasn't been applied to the views yet.
+    /// </summary>
+    public ReportSection? BuildReport(ReportOptions options)
+    {
+        try
+        {
+            var snap = _pending ?? _snap;
+            var byId = _byIdentity;
+            return EventsReport.Build(new EventsReportInput
+            {
+                Groups = snap?.Groups ?? Array.Empty<EventGroup>(),
+                Loaded = snap?.Loaded == true,
+                Notes = snap?.Notes ?? Array.Empty<string>(),
+                CompleteSinceUtc = snap?.CompleteSinceUtc,
+                RangeDays = _view.RangeDays,
+                NowUtc = options.NowUtc,
+                Uptime = TimeSpan.FromMilliseconds(Environment.TickCount64),
+                LastStartUtc = snap?.LastStartUtc,
+                LastStartKind = snap?.LastStartKind ?? -1,
+                Redact = options.Redact,
+                TitleOf = g => byId.TryGetValue(g.Identity, out var vm) ? vm.PlainTitle : g.Newest.Title,
+            });
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex);
+            return new ReportSection { Title = "Events", Body = "(The events summary isn't available right now.)" };
+        }
+    }
+
     public void SetVisibility(bool summaryVisible, bool fullViewVisible)
     {
         _summaryVisible = summaryVisible;

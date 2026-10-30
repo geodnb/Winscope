@@ -18,6 +18,10 @@ internal sealed class CleanupEngine
     private readonly SemaphoreSlim _gate = new(1, 1);       // analysis phase 1 and cleaning never overlap
     private readonly object _lock = new();
     private readonly List<string> _sessionLog = new();
+    private readonly List<ReportCleanRun> _runs = new();
+
+    /// <summary>Summaries of the cleans run this session (for reports).</summary>
+    public IReadOnlyList<ReportCleanRun> CleanRuns { get { lock (_lock) return _runs.ToList(); } }
     private bool _analysing, _again, _reportsAnalysing, _cleaning;
     private Dictionary<string, CategoryResult> _results = new();
     private DateTime? _analysedUtc;
@@ -308,7 +312,7 @@ internal sealed class CleanupEngine
             if (why != null) return null;
         }
         string raw, parentRaw;
-        // GetFullPath doesn't expand 8.3 short names (C:\Users\GEORGE~1\…), so expand them before comparing.
+        // GetFullPath doesn't expand 8.3 short names (C:\Users\SAMTAY~1\…), so expand them before comparing.
         try
         {
             raw = TrimSep(StorageNative.ExpandShortNames(Path.GetFullPath(r.Path)));
@@ -484,7 +488,17 @@ internal sealed class CleanupEngine
         finally
         {
             if (entered) _gate.Release();
-            lock (_lock) _cleaning = false;
+            lock (_lock)
+            {
+                _cleaning = false;
+                if (results.Count > 0)
+                {
+                    _runs.Add(new ReportCleanRun(DateTime.UtcNow, results.Select(o => new ReportCleanItem(
+                        o.Def.Name, o.Files, o.Bytes, o.PendingFiles, o.PendingBytes, o.Skipped.Total, o.Skipped.Describe(),
+                        o.Cancelled, o.StoppedForGrowth)).ToList()));
+                    if (_runs.Count > 50) _runs.RemoveAt(0);
+                }
+            }
             Publish();
         }
         return results;

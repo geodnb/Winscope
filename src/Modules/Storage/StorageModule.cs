@@ -37,6 +37,25 @@ public sealed class StorageModule : IToolModule
 
     public void Start() => _svc.Start();
 
+    /// <summary>
+    /// The Storage part of a WinScope report: drives, cleanup estimate per category, Windows.old/Downloads, the last
+    /// scan and this session's cleanups. Built from data already held (no I/O); never throws.
+    /// </summary>
+    public ReportSection? BuildReport(ReportOptions options)
+    {
+        try
+        {
+            var data = _full.ReportData();
+            var (findings, body) = StorageReport.Build(data, options.NowUtc, options.Redact, Redactor.Apply);
+            return new ReportSection { Title = Title, Findings = findings, Body = body };
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex);
+            return new ReportSection { Title = Title, Body = "Storage details aren't available yet." };
+        }
+    }
+
     /// <summary>Non-null while a restart would interrupt something.</summary>
     public string? BusyReason
     {

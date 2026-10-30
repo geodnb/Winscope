@@ -91,6 +91,24 @@ public sealed class NetworkModule : IToolModule
         catch (Exception ex) { NetLog.Error(ex); }
     }
 
+    /// <summary>Report section from the latest snapshot (UI thread, no I/O, never throws).</summary>
+    public ReportSection? BuildReport(ReportOptions options)
+    {
+        try
+        {
+            // Register the connected Wi-Fi name(s) and profile names, so the shell's final redaction pass masks them
+            // wherever they appear in the report (e.g. another tool's text). Quick local calls; failures ignored.
+            if (options.Redact)
+                foreach (var name in WlanNames.Current()) Redactor.NetworkName(name);
+            return NetworkReport.Build(_monitor.Latest, _monitor.History, options, Elevation.IsAdmin);
+        }
+        catch (Exception ex)
+        {
+            NetLog.Error(ex);
+            return new ReportSection { Title = NetworkReport.Title, Body = "(The network details couldn't be produced this time.)" };
+        }
+    }
+
     private static void StopOrphanSession()
     {
         try { if (EtwNetworkSession.OwnsSessionName) EtwNetworkSession.StopByName(); } catch { }

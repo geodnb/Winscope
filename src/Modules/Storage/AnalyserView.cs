@@ -50,6 +50,8 @@ internal sealed class AnalyserView : Grid
     private bool _visible, _scanning, _recycling;
 
     public bool IsScanning => _scanning;
+    /// <summary>The last finished scan (owned by the UI thread), for reports.</summary>
+    public ScanResult? LastResult => _result;
     public bool IsRecycling => _recycling;
 
     public AnalyserView(StorageService svc)

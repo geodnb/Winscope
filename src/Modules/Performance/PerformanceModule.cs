@@ -95,6 +95,33 @@ public sealed class PerformanceModule : IToolModule
         catch (Exception ex) { App.LogError(ex); }
     }
 
+    /// <summary>
+    /// The Performance part of a WinScope report, from the history and spike log already in memory (one pass over
+    /// up to 2 h of samples under the history lock – a few milliseconds). Never throws.
+    /// </summary>
+    public ReportSection? BuildReport(ReportOptions options)
+    {
+        try
+        {
+            var input = new PerfReportInput
+            {
+                NowStamp = PerfClock.Now,
+                ToLocal = PerfClock.ToLocal,
+                Window = _sampler.History.Summarize(DateTime.MinValue),
+                Latest = _sampler.Latest,
+                Spikes = _sampler.Spikes.Snapshot(),
+                Redact = options.Redact ? Redactor.Apply : null,
+            };
+            var (findings, body) = PerfReport.Build(input);
+            return new ReportSection { Title = Title, Findings = findings, Body = body };
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex);
+            return new ReportSection { Title = Title, Body = "Not available right now (the performance figures couldn't be summarised)." };
+        }
+    }
+
     /// <summary>Shutdown, step 1: stop sampling and timers now, without waiting.</summary>
     public void BeginStop()
     {

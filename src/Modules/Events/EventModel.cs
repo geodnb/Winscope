@@ -85,6 +85,11 @@ public sealed record Classified
     public ulong Code { get; init; }
     /// <summary>A plain network disconnect – downgraded to Info when it lines up with sleep or shutdown.</summary>
     public bool NetDrop { get; init; }
+    /// <summary>
+    /// For events that name a Wi-Fi network (<see cref="Subject"/>): renders the title and explanation with a different
+    /// network name in the SSID slot – used by reports to put in a stand-in without search-and-replace over the text.
+    /// </summary>
+    public Func<string, (string Title, string Explain)>? WithNetworkName { get; init; }
     /// <summary>Windows Error Reporting report id (GUID), used to drop re-sent copies of the same report.</summary>
     public string? ReportId { get; init; }
     /// <summary>Raise to Critical when the same thing (Rule + Subject) happens 3+ times within 24 h.</summary>
@@ -112,6 +117,25 @@ public sealed class EventGroup
     public Classified Newest => Items[0];
     public Classified Oldest => Items[Items.Count - 1];
     public int Count => Items.Count;
+}
+
+/// <summary>Display names and the dashboard's notion of a "problem" (shared by views and reports).</summary>
+public static class EvText
+{
+    public static string CategoryName(EvCategory c) => c switch
+    {
+        EvCategory.Crashes => "Crashes",
+        EvCategory.Graphics => "Graphics & drivers",
+        EvCategory.Hardware => "Hardware",
+        EvCategory.Network => "Network",
+        EvCategory.Updates => "Updates",
+        EvCategory.Power => "Power & startup",
+        EvCategory.Services => "Services",
+        _ => "Other",
+    };
+
+    /// <summary>Counts as a "problem": not harmless, and Problem or Critical severity.</summary>
+    public static bool IsProblem(Classified c) => !c.Harmless && c.Severity >= EvSeverity.Problem;
 }
 
 /// <summary>Counting buckets for "1 blue screen, 3 app crashes, 2 Wi-Fi drops".</summary>

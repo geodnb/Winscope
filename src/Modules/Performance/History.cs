@@ -23,6 +23,43 @@ internal sealed class Moment
     public AppValue[] TopIo = Array.Empty<AppValue>();
 }
 
+/// <summary>Running average/peak of one series.</summary>
+internal struct Stat
+{
+    public double Sum, Peak;
+    public int N;
+    public DateTime PeakAt;
+    public double Avg => N > 0 ? Sum / N : double.NaN;
+    public void Add(double v, DateTime t)
+    {
+        if (double.IsNaN(v)) return;
+        Sum += v;
+        if (N == 0 || v > Peak) { Peak = v; PeakAt = t; }
+        N++;
+    }
+}
+
+/// <summary>An app's total and peak across the seconds it appeared in a top list.</summary>
+internal sealed class AppStat
+{
+    public AppStat(string name) { Name = name; }
+    public string Name { get; }
+    public double Sum, Max;
+    public int Seen;
+}
+
+/// <summary>Summary of a stretch of history (for reports): totals' averages/peaks and the apps that dominated.</summary>
+internal sealed class WindowStats
+{
+    public DateTime FromUtc, ToUtc;
+    public int Samples, ProcSamples, GpuSamples;
+    public Stat Cpu, Gpu, GpuOther, Ram, Disk;
+    public long PeakRamUsed, RamTotal;
+    public int CpuOver85, RamOver90, DiskOver90;          // seconds (samples)
+    /// <summary>Largest first by total (so by average over the window); capped.</summary>
+    public List<AppStat> TopCpu = new(), TopGpu = new(), TopRam = new(), TopIo = new();
+}
+
 /// <summary>Reusable output for <see cref="History.CopySeries"/> (sized for the whole history, so no reallocation).</summary>
 internal sealed class SeriesBuffer
 {
@@ -211,4 +248,70 @@ internal sealed class History
         }
         return res;
     }
+
+    /// <summary>
+    /// Averages, peaks and the dominant apps from <paramref name="fromUtc"/> to now. App figures come from each
+    /// second's stored top lists, so an app that was sometimes outside the top few counts as 0 for those seconds
+    /// (a slight underestimate for minor apps; the leaders are exact). One pass under the lock: ~7,200 × 23 entries.
+    /// </summary>
+    public WindowStats Summarize(DateTime fromUtc, int maxApps = 10)
+    {
+        var w = new WindowStats();
+        var cpu = new Dictionary<string, AppStat>(StringComparer.OrdinalIgnoreCase);
+        var gpu = new Dictionary<string, AppStat>(StringComparer.OrdinalIgnoreCase);
+        var ram = new Dictionary<string, AppStat>(StringComparer.OrdinalIgnoreCase);
+        var io = new Dictionary<string, AppStat>(StringComparer.OrdinalIgnoreCase);
+        lock (_lock)
+        {
+            int a = LowerBound(fromUtc.Ticks);
+            for (int j = a; j < _count; j++)
+            {
+                int p = Phys(j);
+                var t = new DateTime(_t[p], DateTimeKind.Utc);
+                if (w.Samples == 0) w.FromUtc = t;
+                w.ToUtc = t;
+                w.Samples++;
+                ref readonly var tot = ref _tot[p];
+                w.Cpu.Add(tot.Cpu, t);
+                w.Gpu.Add(tot.Gpu, t);
+                w.GpuOther.Add(tot.GpuOther, t);
+                w.Ram.Add(tot.RamPct, t);
+                w.Disk.Add(tot.Disk, t);
+                if (tot.RamUsed > w.PeakRamUsed) w.PeakRamUsed = tot.RamUsed;
+                if (tot.RamTotal > 0) w.RamTotal = tot.RamTotal;
+                if (tot.Cpu >= SpikeDetector.CpuThreshold) w.CpuOver85++;
+                if (tot.RamPct >= SpikeDetector.MemThreshold) w.RamOver90++;
+                if (tot.Disk >= SpikeDetector.DiskThreshold) w.DiskOver90++;
+                if (!double.IsNaN(tot.Gpu)) w.GpuSamples++;
+                int b = p * Slots;
+                if (_names[b + OffRam] != null) w.ProcSamples++;
+                Fold(cpu, b + OffCpu, TopCpuN);
+                Fold(gpu, b + OffGpu, TopGpuN);
+                Fold(ram, b + OffRam, TopRamN);
+                Fold(io, b + OffIo, TopIoN);
+            }
+        }
+        w.TopCpu = Rank(cpu, maxApps);
+        w.TopGpu = Rank(gpu, maxApps);
+        w.TopRam = Rank(ram, maxApps);
+        w.TopIo = Rank(io, maxApps);
+        return w;
+    }
+
+    private void Fold(Dictionary<string, AppStat> d, int b, int n)
+    {
+        for (int k = 0; k < n; k++)
+        {
+            var name = _names[b + k];
+            if (name == null) break;
+            if (!d.TryGetValue(name, out var s)) d[name] = s = new AppStat(name);
+            double v = _vals[b + k];
+            s.Sum += v;
+            if (v > s.Max) s.Max = v;
+            s.Seen++;
+        }
+    }
+
+    private static List<AppStat> Rank(Dictionary<string, AppStat> d, int max) =>
+        d.Values.OrderByDescending(s => s.Sum).ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Take(max).ToList();
 }

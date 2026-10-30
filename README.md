@@ -159,7 +159,7 @@ Reports are plain text written to be read by a person or an AI assistant, so you
 
 **Settings (⚙):**
 - **When you make a report:** copy it to the clipboard (default), save it as a text file in `Documents\WinScope Reports`, or both.
-- **Hide personal details** (on by default): removes your user and PC names, Wi-Fi network names, hardware (MAC) addresses, internet IP addresses and the name in folder paths. Home-network addresses like 192.168.x.x are kept, because they're the same on millions of networks and help with diagnosis.
+- **Hide personal details** (on by default): removes user, account and PC names, email addresses, Wi-Fi network names, hardware (MAC) addresses, device serial numbers, internet IP addresses, Windows account IDs, and the names of your personal files and folders (a big video in Videos shows as `%USERPROFILE%\Videos\…\(name hidden).mp4`). Home-network addresses like 192.168.x.x are kept, because they're the same on millions of networks and help with diagnosis. Making a report never asks for location access.
 
 Read a report before you share it. Turn off *Hide personal details* only for reports you keep to yourself.
 

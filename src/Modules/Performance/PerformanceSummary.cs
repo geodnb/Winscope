@@ -164,7 +164,7 @@ internal sealed class PerformanceSummary : Grid
         else
         {
             _lastSpike.Inlines.Add(new Run(SpikeText.ShortTime(last.StartUtc) + " · ") { Foreground = Palette.B(Palette.Text) });
-            _lastSpike.Inlines.Add(new Run(SpikeText.Culprit(last)) { Foreground = Palette.B(SpikeText.KindColor(last.Kind)), FontWeight = FontWeights.SemiBold });
+            _lastSpike.Inlines.Add(new Run(SpikeText.Culprit(last)) { Foreground = Palette.B(SpikeColors.Of(last.Kind)), FontWeight = FontWeights.SemiBold });
             _lastSpike.Inlines.Add(new Run(last.Ongoing ? "  · happening now" : "  · " + Format.Ago(PerfClock.ToLocal(last.StartUtc))) { Foreground = Palette.B(Palette.Muted) });
             _lastSpike.ToolTip = SpikeText.Describe(last);
         }

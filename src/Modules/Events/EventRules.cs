@@ -587,7 +587,9 @@ public static class EventRules
         // The top processes are in UserData; their exact layout varies, so pick out the .exe names in order.
         var names = new List<string>();
         foreach (var p in e.Props)
-            if (Val.Str(p) is string s && s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && s.Length < 260 && !names.Contains(s, StringComparer.OrdinalIgnoreCase))
+            if (Val.Str(p) is string raw && raw.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && raw.Length < 260
+                && Path.GetFileName(raw.Replace('/', '\\').Split('\\').Last()) is { Length: > 4 } s        // file name only, never a path
+                && !names.Contains(s, StringComparer.OrdinalIgnoreCase))
             {
                 names.Add(s);
                 if (names.Count == 3) break;
@@ -861,11 +863,16 @@ public static class EventRules
 
     private static Classified Wlan8003(RawEvent e)
     {
-        string ssid = Val.Str(e.Field("SSID", 4)) ?? Val.Str(e.Field("ProfileName", 3)) ?? "your Wi-Fi network";
+        // Subject is only ever a real network name (never the placeholder), so a report can't register "your Wi-Fi network" as one.
+        string? net = Val.Str(e.Field("SSID", 4)) ?? Val.Str(e.Field("ProfileName", 3));
+        string ssid = net ?? "your Wi-Fi network";
         string? reason = Val.Name(e.Text("Reason", 6));
         if (IsNormalWifiReason(reason))
-            return Make(e, "wifi-normal", EvCategory.Network, EvSeverity.Info, $"Wi-Fi disconnected from {ssid}",
-                $"A normal disconnect{(reason != null ? ": " + Quote(reason) : "")}.", null);
+        {
+            string normal = $"A normal disconnect{(reason != null ? ": " + Quote(reason) : "")}.";
+            return Make(e, "wifi-normal", EvCategory.Network, EvSeverity.Info, $"Wi-Fi disconnected from {ssid}", normal, null)
+                with { Subject = net, WithNetworkName = net == null ? null : n => ($"Wi-Fi disconnected from {n}", normal) };
+        }
         string hint = "";
         if (reason != null)
         {
@@ -874,14 +881,18 @@ public static class EventRules
             else if (r.Contains("reach") || r.Contains("not available") || r.Contains("no longer") || r.Contains("signal") || r.Contains("lost"))
                 hint = " The PC lost contact with the router – weak signal, interference, or the router changing something.";
         }
-        return Make(e, "wifi-drop", EvCategory.Network, EvSeverity.Problem, $"Wi-Fi dropped: {ssid}",
-            $"Your PC lost its Wi-Fi connection to {ssid}." + (reason != null ? $" Windows gave this reason: {Quote(reason)}." : "") + hint,
-            Kinds.WifiDrop, new[] { TipWifiDriver, TipWifiPower, TipWifiPlan, TipWifiBt, TipRouter }) with { NetDrop = true, Subject = ssid };
+        string tail = (reason != null ? $" Windows gave this reason: {Quote(reason)}." : "") + hint;
+        (string, string) Render(string n) => ($"Wi-Fi dropped: {n}", $"Your PC lost its Wi-Fi connection to {n}." + tail);
+        var (title, text) = Render(ssid);
+        return Make(e, "wifi-drop", EvCategory.Network, EvSeverity.Problem, title, text,
+            Kinds.WifiDrop, new[] { TipWifiDriver, TipWifiPower, TipWifiPlan, TipWifiBt, TipRouter })
+            with { NetDrop = true, Subject = net, WithNetworkName = net == null ? null : Render };
     }
 
     private static Classified Wlan8002(RawEvent e)
     {
-        string ssid = Val.Str(e.Field("SSID", 4)) ?? Val.Str(e.Field("ProfileName", 3)) ?? "a Wi-Fi network";
+        string? net = Val.Str(e.Field("SSID", 4)) ?? Val.Str(e.Field("ProfileName", 3));
+        string ssid = net ?? "a Wi-Fi network";
         string? reason = Val.Name(e.Text("FailureReason", 6));
         var tips = new List<string>();
         string r = reason?.ToLowerInvariant() ?? "";
@@ -889,21 +900,23 @@ public static class EventRules
             tips.Add("Check the Wi-Fi password: Settings › Network & internet › Wi-Fi › Manage known networks › Forget, then connect again.");
         tips.Add("Move closer to the router, or restart the router if no device can connect.");
         tips.Add(TipWifiDriver);
-        return Make(e, "wifi-fail", EvCategory.Network, EvSeverity.Problem, $"Couldn't connect to Wi-Fi network {ssid}",
-            "Windows tried to connect but it failed." + (reason != null ? $" Reason given: {Quote(reason)}." : ""), Kinds.WifiFail, tips) with { Subject = ssid };
+        string failText = "Windows tried to connect but it failed." + (reason != null ? $" Reason given: {Quote(reason)}." : "");
+        return Make(e, "wifi-fail", EvCategory.Network, EvSeverity.Problem, $"Couldn't connect to Wi-Fi network {ssid}", failText, Kinds.WifiFail, tips)
+            with { Subject = net, WithNetworkName = net == null ? null : n => ($"Couldn't connect to Wi-Fi network {n}", failText) };
     }
 
     private static Classified Wlan11006(RawEvent e)
     {
         string? ssid = Val.Str(e.Field("SSID"));
+        const string secText = "The PC and the router couldn't agree the Wi-Fi encryption keys, so the connection failed. A wrong password, or a router mixing WPA2 and WPA3 settings, are common causes.";
         return Make(e, "wifi-sec", EvCategory.Network, EvSeverity.Problem, ssid != null ? $"Wi-Fi security handshake failed: {ssid}" : "Wi-Fi security handshake failed",
-            "The PC and the router couldn't agree the Wi-Fi encryption keys, so the connection failed. A wrong password, or a router mixing WPA2 and WPA3 settings, are common causes.",
+            secText,
             Kinds.WifiFail, new[]
             {
                 "Forget the network and reconnect with the password (Settings › Network & internet › Wi-Fi › Manage known networks).",
                 "If the router has a 'WPA2/WPA3 mixed' mode and drops are frequent, try WPA2 only as a test.",
                 TipWifiDriver,
-            }) with { ShowMessageLine = true };
+            }) with { ShowMessageLine = true, Subject = ssid, WithNetworkName = ssid == null ? null : n => ($"Wi-Fi security handshake failed: {n}", secText) };
     }
 
     private static Classified IntelWifi(RawEvent e)

@@ -275,7 +275,7 @@ public partial class PerformanceView : UserControl
             {
                 MomentTotals.Inlines.Add(new Run("WinScope only keeps per-second details for the last 2 hours, so this moment's full breakdown has gone.") { Foreground = Palette.B(Palette.Muted) });
                 if (_pinnedSpike is SpikeInfo ps && ps.Culprits.Length > 0)
-                    Section("MAIN CULPRITS", ps.Culprits.Select(c => new AppValue(c.Name, c.Max)).ToArray(), SpikeText.KindColor(ps.Kind),
+                    Section("MAIN CULPRITS", ps.Culprits.Select(c => new AppValue(c.Name, c.Max)).ToArray(), SpikeColors.Of(ps.Kind),
                         v => SpikeText.Value(ps.Kind, v), 0, "");
             }
             else MomentTotals.Inlines.Add(new Run("Collecting the first samples…") { Foreground = Palette.B(Palette.Muted) });

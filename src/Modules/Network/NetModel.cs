@@ -230,6 +230,9 @@ public sealed class RateHistory
     }
 }
 
+/// <summary>A network adapter being counted. Link speeds in bits/s (0 = not reported). No hardware addresses.</summary>
+public sealed record AdapterInfo(string Name, string Description, string Kind, long RxLinkBps, long TxLinkBps);
+
 /// <summary>Per-app figures for one snapshot.</summary>
 public sealed class AppStat
 {
@@ -267,6 +270,11 @@ public sealed class NetSnapshot
     public string? EtwMessage { get; init; }
     public string? ConnError { get; init; }
     public string AdapterNames { get; init; } = "";
+    public IReadOnlyList<AdapterInfo> Adapters { get; init; } = Array.Empty<AdapterInfo>();
+    /// <summary>When collection started (session totals count from here), MonoClock time.</summary>
+    public DateTime SessionStartUtc { get; init; }
+    /// <summary>When per-app measurement started running (admin), or null.</summary>
+    public DateTime? PerAppSinceUtc { get; init; }
 }
 
 /// <summary>Vertical budget of the dashboard card (pure maths, unit-tested): 3 apps at the 446 × 245 minimum, up to 5 when taller.</summary>

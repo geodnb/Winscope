@@ -22,8 +22,8 @@ namespace WinScope.Modules.Network;
 internal sealed class AdapterCounters
 {
     private const int RowSize = 1352, TableHeader = 8, MaxRows = 1024;
-    private const int OffLuid = 0, OffGuid = 12, OffAlias = 28, OffType = 1128, OffFlags = 1152, OffOper = 1156,
-        OffInOctets = 1208, OffOutOctets = 1280;
+    private const int OffLuid = 0, OffGuid = 12, OffAlias = 28, OffDescription = 542, OffType = 1128, OffPhysMedium = 1140,
+        OffFlags = 1152, OffOper = 1156, OffTxLink = 1192, OffRxLink = 1200, OffInOctets = 1208, OffOutOctets = 1280;
     private const int IF_TYPE_SOFTWARE_LOOPBACK = 24, IF_TYPE_TUNNEL = 131;
     private const int IfOperStatusUp = 1;
     private const ulong MaxPlausibleDelta = 200UL * 1024 * 1024 * 1024;   // 200 GB in one tick = counter glitch
@@ -39,6 +39,9 @@ internal sealed class AdapterCounters
     public bool UsingFallback { get; private set; }
     /// <summary>Friendly names of the adapters being counted, e.g. "Wi-Fi, Ethernet".</summary>
     public string AdapterNames { get; private set; } = "";
+    /// <summary>The adapters being counted (immutable list, replaced when the set or a link speed changes).</summary>
+    public IReadOnlyList<AdapterInfo> Adapters { get; private set; } = Array.Empty<AdapterInfo>();
+    private readonly List<(long rx, long tx)> _speeds = new();
 
     /// <summary>Bytes received/sent since the previous call (0,0 on the first call).</summary>
     public (long rx, long tx) ReadDelta()
@@ -72,6 +75,7 @@ internal sealed class AdapterCounters
             long rx = 0, tx = 0;
             _seen.Clear();
             _rows.Clear();
+            _speeds.Clear();
             var sig = new System.Text.StringBuilder();
             for (int i = 0; i < n; i++)
             {
@@ -92,6 +96,7 @@ internal sealed class AdapterCounters
                 }
                 _prev[luid] = (inO, outO);
                 _rows.Add(row);
+                _speeds.Add((LinkSpeed(row, OffRxLink), LinkSpeed(row, OffTxLink)));
             }
             // Forget adapters that went away, so one coming back doesn't count its whole downtime as one jump.
             _drop.Clear();
@@ -103,6 +108,14 @@ internal sealed class AdapterCounters
                 // Only re-read the names when the set of adapters changes (the table is still valid here).
                 _setSignature = s;
                 AdapterNames = string.Join(", ", _rows.Select(r => ReadWString(r + OffAlias, 257)).Where(x => x.Length > 0));
+                Adapters = _rows.Select((r, i) => new AdapterInfo(ReadWString(r + OffAlias, 257), ReadWString(r + OffDescription, 257),
+                    Kind(Marshal.ReadInt32(r, OffType), Marshal.ReadInt32(r, OffPhysMedium)), _speeds[i].rx, _speeds[i].tx)).ToArray();
+            }
+            else if (SpeedsChanged())
+            {
+                // Same adapters, new link rate (Wi-Fi rates move about): only copy the speeds.
+                var old = Adapters;
+                Adapters = old.Select((a, i) => i < _speeds.Count ? a with { RxLinkBps = _speeds[i].rx, TxLinkBps = _speeds[i].tx } : a).ToArray();
             }
             return (rx, tx);
         }
@@ -131,6 +144,32 @@ internal sealed class AdapterCounters
         return ids.Count == 0 || matched > 0;
     }
 
+    private bool SpeedsChanged()
+    {
+        var a = Adapters;
+        if (a.Count != _speeds.Count) return false;
+        for (int i = 0; i < a.Count; i++) if (a[i].RxLinkBps != _speeds[i].rx || a[i].TxLinkBps != _speeds[i].tx) return true;
+        return false;
+    }
+
+    /// <summary>Link speed in bits/s; 0 when not reported (some drivers give 0 or all ones).</summary>
+    private static long LinkSpeed(IntPtr row, int off)
+    {
+        ulong v = (ulong)Marshal.ReadInt64(row, off);
+        return v is 0 or > 1_000_000_000_000UL ? 0 : (long)v;
+    }
+
+    /// <summary>IFTYPE (ipifcons.h): 6 Ethernet, 71 IEEE 802.11, 243/244 mobile broadband; NDIS physical medium
+    /// 1 (wireless LAN) / 9 (native 802.11) also mean Wi-Fi.</summary>
+    internal static string Kind(int ifType, int physMedium) => ifType switch
+    {
+        71 => "Wi-Fi",
+        243 or 244 => "Mobile broadband",
+        6 when physMedium is 1 or 9 => "Wi-Fi",
+        6 => "Ethernet",
+        _ => physMedium is 1 or 9 ? "Wi-Fi" : "Other"
+    };
+
     private static string ReadWString(IntPtr p, int maxChars)
     {
         string s = Marshal.PtrToStringUni(p, maxChars);
@@ -146,6 +185,7 @@ internal sealed class AdapterCounters
         long rx = 0, tx = 0;
         var seen = new HashSet<string>();
         var names = new List<string>();
+        var infos = new List<AdapterInfo>();
         foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
         {
             try
@@ -160,6 +200,10 @@ internal sealed class AdapterCounters
                 long inO = st.BytesReceived, outO = st.BytesSent;
                 seen.Add(ni.Id);
                 names.Add(ni.Name);
+                long speed = ni.Speed is > 0 and < 1_000_000_000_000 ? ni.Speed : 0;
+                string kind = ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ? "Wi-Fi"
+                    : ni.NetworkInterfaceType is NetworkInterfaceType.Wwanpp or NetworkInterfaceType.Wwanpp2 ? "Mobile broadband" : "Ethernet";
+                infos.Add(new AdapterInfo(ni.Name, ni.Description, kind, speed, speed));
                 if (_prevFallback.TryGetValue(ni.Id, out var p))
                 {
                     if (inO >= p.rx) rx += inO - p.rx;
@@ -171,6 +215,7 @@ internal sealed class AdapterCounters
         }
         foreach (var k in _prevFallback.Keys.Where(k => !seen.Contains(k)).ToList()) _prevFallback.Remove(k);
         AdapterNames = string.Join(", ", names);
+        Adapters = infos.ToArray();
         return (rx, tx);
     }
 }

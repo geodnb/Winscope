@@ -71,7 +71,7 @@ internal static class StorageNative
     private const uint DRIVE_FIXED = 3;
 
     /// <summary>
-    /// Expand 8.3 short names ("C:\Users\GEORGE~1\…" → "C:\Users\George Elliott\…") with GetLongPathNameW.
+    /// Expand 8.3 short names ("C:\Users\SAMTAY~1\…" → "C:\Users\Sam Taylor\…") with GetLongPathNameW.
     /// Path.GetFullPath doesn't do this. Returns the input unchanged if it has no '~' or can't be expanded
     /// (e.g. it doesn't exist) – callers then compare real final paths, which are always long.
     /// </summary>
