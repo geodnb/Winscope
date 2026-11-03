@@ -174,6 +174,10 @@ public static class Redactor
         "page", "power", "read", "long", "will", "short", "high", "low", "fast", "slow", "start", "stop", "crash", "blue",
         "green", "red", "white", "black", "small", "large", "big", "top", "best", "good", "fair", "poor", "more", "less",
         "about", "after", "before", "since", "until", "never", "always", "here", "there", "this", "that", "with", "from",
+        "your", "yours", "their", "them", "they", "these", "those", "what", "when", "where", "which", "while", "just",
+        "like", "also", "only", "very", "much", "some", "such", "than", "then", "into", "over", "under", "off", "yes",
+        "sleep", "wake", "waking", "restart", "shutdown", "lost", "dropped", "signal", "check", "open", "close", "settings",
+        "help", "hello", "hi", "none", "unknown", "private", "secure", "connected", "disconnected", "wireless",
         // Router and vendor defaults used as network names.
         "netgear", "tp-link", "tplink", "linksys", "d-link", "dlink", "huawei", "zte", "xfinity", "virgin", "sky", "bt",
         "eduroam", "starlink", "guest", "5g", "2.4g", "ax", "ac",
@@ -220,9 +224,13 @@ public static class Redactor
               // rest of the phrase up to punctuation – over-redacting a few words beats leaking a surname.
               .Append(@"(?:[^\\/:*?""<>|\r\n]{1,64}(?=[\\/])|[^\\/:*?""<>|\r\n,;)\]'(]{1,64})");
             // Wi-Fi names before personal names: "Taylor Home 5G" should become one network placeholder, not "[user] Home 5G".
-            var nets = Networks.Keys.Where(k => k.Length >= 2 && !IsGenericPhrase(k)).OrderByDescending(k => k.Length).ToList();
+            // A name is matched in any letter case only when it can't be an ordinary word – it has a digit, a space or
+            // punctuation ("BTHub-Smith", "Taylor Home 5G"). A plain single word ("your", "Jupiter") is matched exactly as
+            // written, so a network named after a word can't rewrite that word all through the report.
+            var nets = Networks.Keys.Where(k => k.Length >= 2 && !IsGenericPhrase(k)).OrderByDescending(k => k.Length)
+                .Select(k => k.All(char.IsLetter) ? "(?-i:" + Regex.Escape(k) + ")" : Regex.Escape(k)).ToList();
             if (nets.Count > 0)
-                sb.Append(@"|(?<net>(?<!\w)(?:").Append(string.Join("|", nets.Select(Regex.Escape))).Append(@")(?!\w))");
+                sb.Append(@"|(?<net>(?<!\w)(?:").Append(string.Join("|", nets)).Append(@")(?!\w))");
             if (words.Count > 0)
                 // Bounded by letters only, so "sam2", "sam_pc" and "%20Taylor%20" are caught too.
                 sb.Append(@"|(?<word>(?<!\p{L})(?:").Append(string.Join("|", words.Keys.OrderByDescending(w => w.Length).Select(Regex.Escape))).Append(@")(?!\p{L}))");
